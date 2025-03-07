@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-from db import init_db
+from ..db import init_db
 from src.api.routes import auth, stock_advice, embeddings, rag
 
 app = FastAPI(title="Financial Advice System for Stock Trading")
