@@ -76,7 +76,7 @@ embedding_model = HuggingFaceEmbeddings(model_name="sentence-transformers/all-Mi
 app = FastAPI()
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://kappa-ai-finquiry.netlify.app"],  # Allows all origins
+    allow_origins=["*"],  # Allows all origins
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -193,6 +193,7 @@ def get_stock_price(request:Stock):
 #Function to create new user
 @app.post("/register")
 def register_user(request:CreateUser):
+    print("here now")
     db = SessionLocal()
     hash_password = bcrypt.hashpw(request.password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
     db_user = db.query(User).filter(User.username== request.username).first()
