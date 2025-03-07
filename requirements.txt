@@ -16,7 +16,7 @@ dnspython==2.7.0
 docopt==0.6.2
 email_validator==2.2.0
 executing==2.2.0
-fastapi[standard]
+fastapi[all]
 fastjsonschema==2.21.1
 h11==0.14.0
 idna==3.10
