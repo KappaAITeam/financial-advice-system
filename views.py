@@ -73,7 +73,9 @@ sentiment_index = pc.Index("stock-sentiment-index")
 embedding_model = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
 
 # Initialize FastAPI
-app = FastAPI()
+app = FastAPI(title="Financial Advice System for Stock Trading")
+
+# Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],  # Allows all origins
@@ -81,6 +83,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.get("/")
+async def root():
+    return {"message": "Welcome to the Financial Advice System API"}
 
 # AI instruction template
 # Default initiate conversation

@@ -4,6 +4,14 @@ from src.api.routes import auth, stock_advice, embeddings, rag, voice_chat_webso
 
 app = FastAPI(title="Financial Advice System for Stock Trading")
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allows all origins
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 # Include routes
 app.include_router(auth.router, prefix="/auth", tags=["Authentication"])
 app.include_router(stock_advice.router, prefix="/stock", tags=["Stock Advice"])
