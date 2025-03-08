@@ -12,9 +12,8 @@ from pydantic import BaseModel
 from langchain.prompts import ChatPromptTemplate
 from langchain_groq import ChatGroq
 from fastapi.middleware.cors import CORSMiddleware
-import base64
+
 from pinecone import Pinecone, ServerlessSpec
-from fastapi.responses import JSONResponse
 
 
 import requests
@@ -30,7 +29,7 @@ from model import *
 
 
 # Load environment variables
-load_dotenv(override=True)
+load_dotenv()
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 RAPID_API_KEY= os.getenv("RAPID_API_KEY")
 PINECONE_API_KEY = os.getenv("PINECONE_API_KEY")
@@ -73,9 +72,8 @@ sentiment_index = pc.Index("stock-sentiment-index")
 embedding_model = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
 
 # Initialize FastAPI
-app = FastAPI(title="Financial Advice System for Stock Trading")
+app = FastAPI()
 
-# Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],  # Allows all origins
@@ -84,14 +82,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-@app.get("/")
-async def root():
-    return {"message": "Welcome to the Financial Advice System API"}
 
-# AI instruction template
-# Default initiate conversation
-
-    
+#Application function body    
 #stock price related info
 def stock_price(stock:str):
     """ Get current price quote of stock"""
@@ -111,7 +103,8 @@ def stock_chart(stock:str):
 
 prompt ="""
     Instructions:
-
+    - Remove html or css tag from your response.
+    - Provide valid web address to be use for further information.
     - Be helpful and answer questions concisely. If you don't know the answer, say 'I don't know'.
     - Utilize the context provided for accurate and specific information.
     - Incorporate your preexisting knowledge to enhance the depth and relevance of your response.
@@ -122,15 +115,15 @@ prompt ="""
 
     Context: {context}
 
-    Question: This is for stock {stock}. {query}
+    Question: {query}
 """
 
 
 # Instantiate prompt
 # function to handle prompt input
-def use_prompt(context:str|None,query:str |None, stock:str|None):
+def use_prompt(context:str|None,query:str |None):
     prompt_template = ChatPromptTemplate.from_template(
-    prompt ).format_messages(context=context, query=query, stock=stock
+    prompt ).format_messages(context=context, query=query
         )
     return prompt_template
 
@@ -159,14 +152,8 @@ def get_stock_chart(request:Stock):
         plt.savefig(img_bytes, format="png")
         plt.close()
         img_bytes.seek(0)
-
-        # Encode the image in Base64
-        encoded = base64.b64encode(img_bytes.getvalue()).decode("utf-8")
-        # Build the Data URL
-        data_url = f"data:image/png;base64,{encoded}"
-        
-        # Return the Data URL in a JSON response
-        return JSONResponse(content={"image": data_url})
+        # Return the image as response
+        return Response(content=img_bytes.getvalue(), media_type="image/png")
     except KeyError:
         return {"error": "Invalid data format"}
 
@@ -199,7 +186,6 @@ def get_stock_price(request:Stock):
 #Function to create new user
 @app.post("/register")
 def register_user(request:CreateUser):
-    print("here now")
     db = SessionLocal()
     hash_password = bcrypt.hashpw(request.password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
     db_user = db.query(User).filter(User.username== request.username).first()
@@ -231,25 +217,32 @@ def login_user(form_data:OAuth2PasswordRequestForm =Depends()):
         "user_id": user.id
         #"exp": datetime.datetime() + datetime.timedelta(hours=1)  # Token expires in 1 hour
     }
-    #jwt can be use to manage data validity her
+    #jwt can be use to manage data validity here
     
     return {"response": token_payload}
     
 #function to store chat message
-def store_advice_message(username: int, message: str, ticker: str):
+def store_advice_message(user_id: int, message: str, ticker: str):
     db = SessionLocal()
     try:
+        if not message.strip():  # Ensure message is not empty
+            print("Warning: Attempted to store an empty message.")
+            return  # Exit function without storing
+        
         # Create and add new chat entry
-        chat_entry = AdviseHistory(user_id=username, message=message, stock=ticker)
+        chat_entry = AdviseHistory(user_id=user_id, message=message, stock=ticker)
         db.add(chat_entry)
         db.commit()
-    
+        db.refresh(chat_entry)  # Ensure the object is fully committed
+
+          
     except Exception as e:
         db.rollback()  # Rollback transaction if there's an error
         print(f"Error storing advice message: {e}")
     
     finally:
-        db.close()  # Ensure session is always closed
+        db.close()  # Ensure session is always closed.
+
 
 """
 def store_advice_message(user_id: int, message:str, ticker:str):
@@ -274,10 +267,11 @@ def retrieve_previous_advice(user_id: int, ticker: str):
     try:
         # Check if the user has previous advice
         messages = db.query(AdviseHistory).filter(
-            (AdviseHistory.user_id == user_id) & (AdviseHistory.stock == ticker)
+            AdviseHistory.user_id == user_id,
+            AdviseHistory.stock == ticker
         ).order_by(AdviseHistory.id.asc()).all()
 
-        # Return empty response if no messages found
+        #Return empty response if no messages found
         if not messages:
             return {"response": ""}
 
@@ -290,9 +284,8 @@ def retrieve_previous_advice(user_id: int, ticker: str):
     finally:
         db.close()  # Ensure the session is closed
 
-
 # get AI expert advice
-def get_ai_advice(user_id:str, prompt:str,stock:str, query:str):
+def get_ai_advice(user_id:str |None, prompt:str,stock:str, query:str):
     """This function embed user query to get advice on particular stocks"""
     #for better optimized similarity search attach stock ticker to query
     new_query = query +' '+'?'+ stock
@@ -301,22 +294,24 @@ def get_ai_advice(user_id:str, prompt:str,stock:str, query:str):
     #join all query together to use single prompt
     vector_response_list=[]
     results=insight_index.query(vector=query_embedding,
-                    top_k=4,
-                    include_metadata=True
+                    top_k=10,
+                    include_metadata=True,
+                    filter={"ticker": stock}
                     )
     retrieve_content=[(result["metadata"][stock], result["metadata"]["content"]) for result in results["matches"]]
     vector_response_list.extend([f"{meta}: {content}" for meta, content in retrieve_content])
     #get sentiments news
     _results=sentiment_index.query(vector=query_embedding,
-                    top_k=4,
-                    include_metadata=True
+                    top_k=10,
+                    include_metadata=True,
+                    filter={"ticker": stock}
                     )
     retrievecontent=[(result["metadata"][stock], result["metadata"]["content"]) for result in _results["matches"]]
     vector_response_list.extend([f"{meta}: {content}" for meta, content in retrievecontent])
     
     # Join all retrieved content into a single string
     vector_response = " ".join(vector_response_list)
-    prompt = use_prompt(context=vector_response,query=query,stock=stock)
+    prompt = use_prompt(context=vector_response,query=query)
     try:
         response= llm.invoke(
             prompt
@@ -328,7 +323,7 @@ def get_ai_advice(user_id:str, prompt:str,stock:str, query:str):
         return {"error": str(e)}
 
 
-#Retrieve previous chat history for particular AI
+#Retrieve previous chat history for particular stock
 @app.post("/history")
 def get_advice_history(request:AiAdviseHistory):
     #fetch history with username
@@ -345,7 +340,7 @@ async def chat_text(request:Message):
     response = get_ai_advice(user_id=prompt_user["user_id"],prompt=prompt,
                              query=request.message, stock=request.stock)
     
-    store_advice_message(username=request.username, message=response["response"],ticker=request.stock)
+    store_advice_message(user_id=prompt_user["user_id"], message=response["response"],ticker=request.stock)
     return response
     
     
