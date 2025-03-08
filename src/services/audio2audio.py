@@ -46,11 +46,8 @@ async def voice_to_voice(request: Request, audio: UploadFile):
 
         # AI response for both text and audio
         system_prompt = """
-            - Be helpful and answer questions concisely. If you don't know the answer, say 'I don't know'.
-            - Utilize the context provided for accurate and specific information.
-            - Incorporate your preexisting knowledge to enhance the depth and relevance of your response.
-            - Clearly present advantages and disadvantages of buying a stock based on retrieved information.
-            - Cite your sources.
+            You are a helpful stock and forex adviser that helps people to choose the right stock to invest in.
+            Let your answers be concise. If you don't know the answer, say 'I don't know'.
         """
         messages = [
             {"role": "system", "content": system_prompt},
