@@ -113,8 +113,12 @@ async def voice_to_voice_stream(audio: UploadFile):
         chat_history.append({"role": "user", "content": user_text})
 
         # AI response
+        system_prompt = """
+            You are a helpful stock and forex adviser that helps people to choose the right stock to invest in.
+            Let your answers be concise. If you don't know the answer, say 'I don't know'.
+        """
         messages = [
-            {"role": "system", "content": "You are a helpful assistant."},
+            {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_text}
         ]
         response = openai.chat.completions.create(
